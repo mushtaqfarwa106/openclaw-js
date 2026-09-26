@@ -3,6 +3,19 @@ import { WebClient } from '@slack/web-api';
 import cron from 'node-cron';
 import si from 'systeminformation';
 import { execSync } from 'node:child_process';
+import express from 'express';
+
+// Initialize Express for Render web service health checks
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.status(200).send('🚀 OpenClaw Proactive Automation Engine is Alive!');
+});
+
+app.listen(PORT, () => {
+    console.log(`🌍 HTTP Server is running on port ${PORT}`);
+});
 
 // Initialize Slack client
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
