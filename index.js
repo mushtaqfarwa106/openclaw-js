@@ -1,41 +1,49 @@
-import express from 'express';
-import { run } from './agent.js';
+import 'dotenv/config';
+import { WebClient } from '@slack/web-api';
+import cron from 'node-cron';
+import si from 'systeminformation';
+import { execSync } from 'node:child_process';
 
-const app = express();
-const PORT = process.env.PORT ?? 8000;
+// Initialize Slack client
+const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+const CHANNEL_ID = "C0AL5BT1HPS"; // Your Slack channel ID
 
-app.use(express.json());
-
-app.get('/', (req, res) => {
-    res.send('AI Agent Server is Running!');
-});
-
-app.post('/message', async (req, res) => {
-    const { message } = req.body;
-
-    if (!message) {
-        return res.status(400).json({ error: "No message provided" });
-    }
-    
+// 1. System Metrics Monitor Cron (Runs every 6 hours in production)
+cron.schedule('0 */6 * * *', async () => {
+    console.log("⏰ Running system metrics check...");
     try {
-        console.log(`Processing: ${message}`);
-        const history = await run(message);
+        const mem = await si.mem();
+        const cpu = await si.currentLoad();
+        const osInfo = await si.osInfo();
         
-        // Always return 200 with the history body
-        return res.status(200).json({ 
-            success: true,
-            messages: history 
-        });
+        const ramUsed = ((mem.active / mem.total) * 100).toFixed(1);
+        const cpuLoad = cpu.currentLoad.toFixed(1);
 
-    } catch (error) {
-        console.error("Server Route Error:", error.message);
-        return res.status(500).json({ 
-            success: false,
-            error: error.message 
+        const message = `📊 *System Metrics Report*\n• *Platform:* ${osInfo.platform} (${osInfo.release})\n• *CPU Usage:* ${cpuLoad}\%\n• *RAM Usage:*${ramUsed}%`;
+        
+        await slack.chat.postMessage({
+            channel: CHANNEL_ID,
+            text: message
         });
+        console.log("✅ System metrics sent to Slack!");
+    } catch (error) {
+        console.error("❌ System metrics check error:", error.message);
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+// 2. Git Activity Digest Cron (Runs daily at 9:00 AM in production)
+cron.schedule('0 9 * * *', async () => {
+    console.log("⏰ Running Git commit digest check...");
+    try {
+        const gitLog = execSync('git log -n 3 --oneline').toString() || "No recent commits.";
+        await slack.chat.postMessage({
+            channel: CHANNEL_ID,
+            text: `💻 *Dev Digest (Recent Git Activity):*\n\`\`\`${gitLog}\`\`\``
+        });
+        console.log("✅ Git digest sent to Slack!");
+    } catch (e) {
+        console.log("⚠️ Git digest skipped: Not a git repository or no commits found yet.");
+    }
 });
+
+console.log("🚀 OpenClaw Proactive Automation Engine Running!");

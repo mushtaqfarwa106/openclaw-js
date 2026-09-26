@@ -1,27 +1,18 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { execSync } from "node:child_process";
 import { WebClient } from "@slack/web-api"; 
-import pkg from 'whatsapp-web.js'; 
-const { Client, LocalAuth } = pkg;
-import qrcode from 'qrcode-terminal'; 
+import si from 'systeminformation'; 
+import fs from 'node:fs';            
+import path from 'node:path'; 
 
-// 1. Initialize Clients
-const genAI = new GoogleGenerativeAI("AIzaSyDy9B5vS4n0AXuKnFR3Emdl4nVQBC1ZhXw");
+// 1. Initialize Clients using Environment Variables
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// USE THE NEW GEMINI 3.1 MODEL NAME
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-3.1-flash-lite-preview" 
+    model: "gemini-1.5-flash" 
 });
 
-const slack = new WebClient("xoxb-10653699693957-10650791541875-ZmweK6pvhP6CPGtLwbVbkQj4");
-const whatsapp = new Client({ 
-    authStrategy: new LocalAuth(),
-    puppeteer: { headless: true, args: ['--no-sandbox'] }
-});
-
-whatsapp.on('qr', qr => qrcode.generate(qr, { small: true }));
-whatsapp.on('ready', () => console.log('WhatsApp is ready!'));
-whatsapp.initialize();
+const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 
 // 2. Tools
 const tools = {
@@ -37,79 +28,113 @@ const tools = {
             return "Slack message sent!";
         } catch (e) { return `Slack Error: ${e.message}`; }
     },
-    sendWhatsAppMessage: async (phone, message) => {
-        try {
-            const chatId = `${phone.replace(/\D/g, '')}@c.us`;
-            await whatsapp.sendMessage(chatId, message);
-            return "WhatsApp message sent!";
-        } catch (e) { return `WhatsApp Error: ${e.message}`; }
+    getSystemHealth: async () => {
+        const mem = await si.mem();
+        const disk = await si.fsSize();
+        const ramUsed = ((mem.active / mem.total) * 100).toFixed(1);
+        const diskUsed = disk[0].use.toFixed(1);
+        return `System Status: RAM at ${ramUsed}%, Disk at ${diskUsed}%.`;
+    },
+    organizeFolder: (dirPath) => {
+        if (!fs.existsSync(dirPath)) return "Folder not found.";
+        const files = fs.readdirSync(dirPath);
+        const mapping = {
+            'Documents': ['.pdf', '.txt', '.docx'],
+            'Images': ['.jpg', '.png', '.gif'],
+            'Code': ['.js', '.html', '.css', '.py']
+        };
+        files.forEach(file => {
+            const ext = path.extname(file).toLowerCase();
+            for (const [folder, exts] of Object.entries(mapping)) {
+                if (exts.includes(ext)) {
+                    const targetDir = path.join(dirPath, folder);
+                    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir);
+                    fs.renameSync(path.join(dirPath, file), path.join(targetDir, file));
+                }
+            }
+        });
+        return "Folder organized successfully!";
+    },
+    manageTodo: (action, task) => {
+        const filePath = './todo.json';
+        let todos = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, 'utf8')) : [];
+        if (action === 'add') todos.push({ id: Date.now(), task, status: 'pending' });
+        else if (action === 'clear') todos = [];
+        fs.writeFileSync(filePath, JSON.stringify(todos, null, 2));
+        return todos.length ? todos.map(t => `- ${t.task}`).join('\n') : "Your list is empty!";
+    },
+    getGitStatus: () => {
+        try { return execSync("git status --short").toString() || "Git directory is clean."; }
+        catch (e) { return "Not a git repository."; }
     }
 };
 
 // 3. Main Agent Loop
 export async function run(query = '') {
-    const history = [
-        { role: 'user', parts: [{ text: query }] }
-    ];
-
+    const history = [{ role: 'user', parts: [{ text: query }] }];
     try {
         const lowerQuery = query.toLowerCase();
+
+        // TO-DO LIST LOGIC
+        if (lowerQuery.includes("todo") || lowerQuery.includes("to-do")) {
+            let resultText = "";
+            if (lowerQuery.includes("add")) {
+                const task = query.split("add ")[1] || "New Task";
+                resultText = `Task Added. Current List:\n${tools.manageTodo('add', task)}`;
+            } else if (lowerQuery.includes("clear")) {
+                resultText = `List Cleared: ${tools.manageTodo('clear')}`;
+            } else {
+                resultText = `Your To-Do List:\n${tools.manageTodo('list')}`;
+            }
+            return [...history, { role: 'model', parts: [{ text: resultText }] }];
+        }
+
+        // GIT STATUS LOGIC
+        if (lowerQuery.includes("git status")) {
+            const status = tools.getGitStatus();
+            return [...history, { role: 'model', parts: [{ text: `💻 Git Status:\n${status}` }] }];
+        }
+
+        // SYSTEM HEALTH
+        if (lowerQuery.includes("system health") || lowerQuery.includes("monitor")) {
+            const healthReport = await tools.getSystemHealth();
+            return [...history, { role: 'model', parts: [{ text: `📊 ${healthReport}` }] }];
+        }
+
+        // FOLDER ORGANIZATION
+        if (lowerQuery.includes("organize")) {
+            const pathMatch = query.match(/(?:folder|path)\s+([^\s]+)/i);
+            const targetPath = pathMatch ? pathMatch[1] : "./downloads"; 
+            const result = tools.organizeFolder(targetPath);
+            return [...history, { role: 'model', parts: [{ text: `📂 ${result}` }] }];
+        }
 
         // SLACK AUTOMATION
         if (lowerQuery.includes("slack")) {
             const channelMatch = query.match(/C[A-Z0-9]{8,10}/);
             const channel = channelMatch ? channelMatch[0] : "C0AL5BT1HPS"; 
             const msg = query.split("saying ")[1] || "Hello from your AI Agent!";
-            
             const resultText = await tools.sendSlackMessage(channel, msg);
-            return [...history, { role: 'model', parts: [{ text: `✅ ${resultText} to ${channel}` }] }];
-        }
-
-        // WHATSAPP AUTOMATION
-        if (lowerQuery.includes("whatsapp")) {
-            const phoneMatch = query.match(/\d{10,15}/);
-            const phone = phoneMatch ? phoneMatch[0] : "923XXXXXXXXX"; 
-            const msg = query.split("saying ")[1] || "Hello from WhatsApp!";
-            
-            const resultText = await tools.sendWhatsAppMessage(phone, msg);
-            return [...history, { role: 'model', parts: [{ text: `✅ ${resultText} to ${phone}` }] }];
+            return [...history, { role: 'model', parts: [{ text: `✅ ${resultText}` }] }];
         }
 
         // FILE AUTOMATION
         if (lowerQuery.includes("create") && lowerQuery.includes("file")) {
             const fileNameMatch = query.match(/named\s+([^\s]+)/i) || query.match(/name\s+([^\s]+)/i);
             const fileName = fileNameMatch ? fileNameMatch[1] : "new_file.txt";
-            
-            let content = "Created by Gemini 3 Agent";
-            if (query.includes("with ")) {
-                content = query.split("with ")[1];
-            }
-
+            let content = query.includes("with ") ? query.split("with ")[1] : "Created by Gemini Agent";
             const command = `echo ${content} > ${fileName}`;
             const resultText = tools.executeCommand(command);
-
-            return [
-                ...history,
-                { role: 'model', parts: [{ text: `Gemini 3 Action: Executed [${command}]. Result: ${resultText}` }] }
-            ];
+            return [...history, { role: 'model', parts: [{ text: `Executed [${command}]. Result: ${resultText}` }] }];
         }
 
-        // Standard chat with Gemini 3 (Fixed property name to generationConfig)
         const result = await model.generateContent({
             contents: history,
-            generationConfig: { 
-                temperature: 0.7 
-            }
+            generationConfig: { temperature: 0.7 }
         });
-        
-        const responseText = result.response.text();
-        return [...history, { role: 'model', parts: [{ text: responseText }] }];
+        return [...history, { role: 'model', parts: [{ text: result.response.text() }] }];
 
     } catch (error) {
-        console.error("Gemini 3 Error:", error.message);
-        return [
-            ...history, 
-            { role: 'model', parts: [{ text: `Gemini 3 Error: ${error.message}` }] }
-        ];
+        return [...history, { role: 'model', parts: [{ text: `Error: ${error.message}` }] }];
     }
 }
