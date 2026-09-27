@@ -1,77 +1,27 @@
-🚀 OpenClaw Proactive Automation Engine
+# 🤖 OpenClaw Mini (Backend Automation Agent)
 
-openclaw-js is a lightweight, self-contained background worker and automation engine built with Node.js, Express, node-cron, systeminformation, and the Slack Web API. It proactively tracks native system performance metrics and local Git repository activity, pushing structured operational digests directly into a designated Slack channel via scheduled cron jobs.
+A multi-channel AI automation and background monitoring agent built with Node.js and Express. Designed to execute scheduled tasks, track real-time system health metrics, and stream formatted AI insights directly into messaging workflows like Slack using the Google Gemini API.
 
-💡 Why This Architecture? (The Problem & Solution)
+## 🚀 Key Features
+* **Automated Background Cron Jobs:** Utilizes `node-cron` to execute scheduled health checks and developer activity digests.
+* **System-Level OS Monitoring:** Integrates the `systeminformation` library to capture real-time platform data, CPU usage, and RAM consumption.
+* **AI-Powered Code Digests:** Connects with the Google Gemini API to process and summarize repository activity.
+* **Slack Webhook Integration:** Automatically streams live system metrics and formatted status reports into designated Slack channels.
+* **Production Cloud Deployment:** Hosted live on Railway with a continuous external heartbeat (`cron-job.org`) to maintain 24/7 uptime.
 
-In many development environments, tracking infrastructure health and team velocity requires manual "pull" effort—opening terminal windows, checking task managers, or running git log.
+## 🛠️ Tech Stack
+* **Runtime:** Node.js
+* **Framework:** Express.js
+* **Automation & Monitoring:** `node-cron`, `systeminformation`
+* **APIs & SDKs:** Google Gemini API, `@slack/web-api`
+* **Infrastructure:** Railway, `cron-job.org`
 
-openclaw-js implements a Proactive Push Architecture:
+## 📊 Live System Output (Slack Integration)
+*Automated system metrics and developer digests actively streaming into Slack:*
 
-Zero Context Switching: Vital updates are brought directly to where the team already collaborates (Slack).
-
-Asynchronous Visibility: Automates daily development standup summaries and system health checks without manual intervention.
-
-Lightweight & Resilient: Avoids complex, fragile third-party AI dependencies or heavy authentication overhead by relying on robust, native Node.js ecosystems combined with a lightweight Express heartbeat server.
-
-🛠️ Tech Stack
-
-Runtime: Node.js (ES Modules)
-
-Web Framework: Express (handles lightweight server binding and health checks)
-
-Task Scheduling: node-cron (Production-ready cron timing schedules)
-
-System Monitoring: systeminformation (Cross-platform OS, CPU, and RAM metrics)
-
-Version Control Integration: Native execSync via Node child processes for Git audit logs
-
-Notifications: @slack/web-api (Official Slack Bot integration)
-
-⚙️ Features & Production Schedule
-
-System Metrics Report (Runs every 6 hours: 0 */6 * * *)
-
-Inspects host OS platform and release data.
-
-Tracks real-time CPU utilization and active RAM consumption percentages.
-
-Formats data into clean Markdown blocks for immediate Slack alerts.
-
-Git Commit Activity Digest (Runs daily at 9:00 AM: 0 9 * * *)
-
-Executes local Git log checks (git log -n 3 --oneline).
-
-Provides an automated morning recap of recent code commits as an asynchronous standup summary.
-
-🚀 Getting Started
-
-Prerequisites
-
-Node.js (v18+ recommended)
-
-A Slack Workspace with a configured Bot Token (chat:write scope) and target Channel ID.
-
-Installation
-
-Clone the repository:
-
-git clone https://github.com/your-username/openclaw-js.git
-cd openclaw-js
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/14e10a70-10b8-416b-a003-00f377f4e60b" />
 
 
-Install dependencies:
-
-npm install
-
-
-Configure your environment variables:
-Create a .env file in the root directory and add your credentials:
-
-SLACK_BOT_TOKEN=xoxb-your-slack-bot-token-here
-PORT=8000
-
-
-Run the engine:
-
-node index.js
+## 🌐 Live Endpoint & Links
+* **Repository:** [GitHub Repository](https://github.com/mushtaqfarwa106/openclaw-js.git)
+* **Live Service URL:** [openclaw-js-production.up.railway.app](https://openclaw-js-production.up.railway.app)
